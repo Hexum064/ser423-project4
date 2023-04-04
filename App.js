@@ -1,28 +1,46 @@
+/*
+
+Class: SER423
+Project: 4
+
+Author: Branden Boucher
+Original Author: React Native Cookbook - Second Edition
+Repo: https://github.com/warlyware/react-native-cookbook
+
+*/
+
 import React, { Component } from 'react';
 import { Audio } from 'expo-av';
 import { Feather } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
 import {
     StyleSheet,
     Text,
     TouchableOpacity,
-    View,
-    Dimensions
+    View
 } from 'react-native';
+
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const pickerOptions = ["na", "1 Star", "2 Stars", "3 Stars", "4 Stars", "5 Stars"];
 
 const playlist = [
     {
+        id: "song1",
         title: 'People Watching',
         artist: 'Keller Williams',
         album: 'Keller Williams Live at The Westcott Theater on 2012-09-22',
         uri: 'https://ia800308.us.archive.org/7/items/kwilliams2012-09-22.at853.flac16/kwilliams2012-09-22at853.t16.mp3'
     },
     {
+        id: "song2",
         title: 'Hunted By A Freak',
         artist: 'Mogwai',
         album: 'Mogwai Live at Ancienne Belgique on 2017-10-20',
         uri: 'https://ia601509.us.archive.org/17/items/mogwai2017-10-20.brussels.fm/Mogwai2017-10-20Brussels-07.mp3'
     },
     {
+        id: "song3",
         title: 'Nervous Tic Motion of the Head to the Left',
         artist: 'Andrew Bird',
         album: 'Andrew Bird Live at Rio Theater on 2011-01-28',
@@ -38,8 +56,10 @@ export default class App extends Component {
         volume: 1.0,
         currentTrackIndex: 0,
         isBuffering: false,
+        currentRating: 'na',
     };
 
+    //Set up the audio player on mount
     async componentDidMount() {
         await Audio.setAudioModeAsync({
             allowsRecordingIOS: false,
@@ -52,6 +72,39 @@ export default class App extends Component {
         this.loadAudio();
     }
 
+    //Load the rating from storage for the current track
+    loadRating = async () => {
+        try {
+            //First generate a key based on the song's title.
+            const key = "@MyApp:" + playlist[this.state.currentTrackIndex].title.replaceAll(' ', '_');
+            //Then load the rating
+            this.setState({ currentRating: (await AsyncStorage.getItem(key)) ?? 'na' });
+
+        } catch (error) {
+            console.log(error);
+            alert('Error', 'There was an error while loading the data');
+        }
+    }
+
+    //Save the rating to storage for the current track
+    saveRating = async (rating) => {
+        try {
+
+            //First generate a key based on the song's title.
+            const key = "@MyApp:" + playlist[this.state.currentTrackIndex].title.replaceAll(' ', '_');                       
+            //save the rating
+            await AsyncStorage.setItem(key, rating);
+            //set the current rating state
+            this.setState({ currentRating: rating});
+            
+        } catch (error) {
+            console.log(error);
+            alert('Error', 'There was an error while saving the data');
+
+        }
+    }
+
+    //Load the selected sound
     async loadAudio() {
         const playbackInstance = new Audio.Sound();
         const source = {
@@ -64,18 +117,22 @@ export default class App extends Component {
         playbackInstance.setOnPlaybackStatusUpdate(this.onPlaybackStatusUpdate);
         await playbackInstance.loadAsync(source, status, false);
         this.setState({ playbackInstance });
+        this.loadRating();
     }
 
+    //Update the state of the loading
     onPlaybackStatusUpdate = (status) => {
         this.setState({ isBuffering: status.isBuffering });
     }
 
+    //Play/Pause button handler
     handlePlayPause = async () => {
         const { isPlaying, playbackInstance } = this.state;
         isPlaying ? await playbackInstance.pauseAsync() : await playbackInstance.playAsync();
         this.setState({ isPlaying: !isPlaying });
     }
 
+    //Previous button handler
     handlePreviousTrack = async () => {
         let { playbackInstance, currentTrackIndex } = this.state;
         if (playbackInstance) {
@@ -86,6 +143,7 @@ export default class App extends Component {
         }
     }
 
+    //Next button handler
     handleNextTrack = async () => {
         let { playbackInstance, currentTrackIndex } = this.state;
         if (playbackInstance) {
@@ -115,7 +173,7 @@ export default class App extends Component {
                         style={styles.control}
                         onPress={this.handlePlayPause}
                     >
-                        {this.state.isPlaying ?
+                        {this.state.isPlaying ? //switch the button based on the isPlaying state
                             <Feather name="pause" size={32} color="#fff" /> :
                             <Feather name="play" size={32} color="#fff" />
                         }
@@ -126,6 +184,16 @@ export default class App extends Component {
                     >
                         <Feather name="skip-forward" size={32} color="#fff" />
                     </TouchableOpacity>
+                </View>
+                <View style={styles.ratings}>
+                    <Picker style={{ flex: 1}} mode='dropdown'
+                        selectedValue={this.state.currentRating}
+                        value={this.state.currentRating}
+                        onValueChange={this.saveRating}>
+                        {pickerOptions.map((option) => {                            
+                            return <Picker.Item key={option} label={option} value={option} />;
+                        })}
+                    </Picker>
                 </View>
             </View>
         );
@@ -143,6 +211,9 @@ export default class App extends Component {
             </Text>
             <Text style={[styles.trackInfoText, styles.smallText]}>
                 {playlist[currentTrackIndex].album}
+            </Text>
+            <Text style={[styles.trackInfoText, styles.smallText]}>
+                Rating: {this.state.currentRating}
             </Text>
         </View>
             : null;
@@ -181,5 +252,9 @@ const styles = StyleSheet.create({
     },
     controls: {
         flexDirection: 'row'
+    },
+    ratings: {
+        flexDirection: 'row',
+        backgroundColor: '#DDD'
     }
 });

@@ -1,135 +1,185 @@
-
 import React, { Component } from 'react';
-import { Picker } from '@react-native-picker/picker'; // You'll need this for the exercise
+import { Audio } from 'expo-av';
+import { Feather } from '@expo/vector-icons';
 import {
-  Alert,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
-  OptionBox
+    StyleSheet,
+    Text,
+    TouchableOpacity,
+    View,
+    Dimensions
 } from 'react-native';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+const playlist = [
+    {
+        title: 'People Watching',
+        artist: 'Keller Williams',
+        album: 'Keller Williams Live at The Westcott Theater on 2012-09-22',
+        uri: 'https://ia800308.us.archive.org/7/items/kwilliams2012-09-22.at853.flac16/kwilliams2012-09-22at853.t16.mp3'
+    },
+    {
+        title: 'Hunted By A Freak',
+        artist: 'Mogwai',
+        album: 'Mogwai Live at Ancienne Belgique on 2017-10-20',
+        uri: 'https://ia601509.us.archive.org/17/items/mogwai2017-10-20.brussels.fm/Mogwai2017-10-20Brussels-07.mp3'
+    },
+    {
+        title: 'Nervous Tic Motion of the Head to the Left',
+        artist: 'Andrew Bird',
+        album: 'Andrew Bird Live at Rio Theater on 2011-01-28',
+        uri: 'https://ia800503.us.archive.org/8/items/andrewbird2011-01-28.early.dr7.flac16/andrewbird2011-01-28.early.t07.mp3'
+    }
+];
 
-
-const key1 = '@MyApp:option1key';
-const key2 = '@MyApp:option2key';
-const key3 = '@MyApp:option3key';
-
-const pickerOptions = ["1 Star", "2 Stars", "3 Stars", "4 Stars", "5 Stars"];
 
 export default class App extends Component {
-  state = {
-    option1: '',
-    option2: '',
-    option3: ''
-  };
+    state = {
+        isPlaying: false,
+        playbackInstance: null,
+        volume: 1.0,
+        currentTrackIndex: 0,
+        isBuffering: false,
+    };
 
-  componentDidMount() {
-    this.onLoad();
-  }
-
-  onLoad = async () => {
-    try {
-      const option1 = (await AsyncStorage.getItem(key1)) ?? 'na';
-      const option2 = (await AsyncStorage.getItem(key2)) ?? 'na';
-      const option3 = (await AsyncStorage.getItem(key3)) ?? 'na';
-
-      this.setState({ option1, option2, option3 });
-    } catch (error) {
-      console.log(error);
-      Alert.alert('Error', 'There was an error while loading the data');
+    async componentDidMount() {
+        await Audio.setAudioModeAsync({
+            allowsRecordingIOS: false,
+            playThroughEarpieceAndroid: true,
+            interruptionModeIOS: 1,
+            playsInSilentModeIOS: true,
+            shouldDuckAndroid: true,
+            interruptionModeAndroid: 1,
+        });
+        this.loadAudio();
     }
-  }
 
-  onSave = async () => {
-    try {
-      await AsyncStorage.setItem(key1, this.state.option1);
-      await AsyncStorage.setItem(key2, this.state.option2);
-      await AsyncStorage.setItem(key3, this.state.option3);
-      Alert.alert('Saved', 'Successfully saved on device');
-    } catch (error) {
-      console.log(error);
-      Alert.alert('Error', 'There was an error while saving the data');
-
+    async loadAudio() {
+        const playbackInstance = new Audio.Sound();
+        const source = {
+            uri: playlist[this.state.currentTrackIndex].uri
+        }
+        const status = {
+            shouldPlay: this.state.isPlaying,
+            volume: this.state.volume,
+        };
+        playbackInstance.setOnPlaybackStatusUpdate(this.onPlaybackStatusUpdate);
+        await playbackInstance.loadAsync(source, status, false);
+        this.setState({ playbackInstance });
     }
-  }
 
-  onChange = (text) => {
-    this.setState({ text });
-  }
+    onPlaybackStatusUpdate = (status) => {
+        this.setState({ isBuffering: status.isBuffering });
+    }
 
-  render() {
+    handlePlayPause = async () => {
+        const { isPlaying, playbackInstance } = this.state;
+        isPlaying ? await playbackInstance.pauseAsync() : await playbackInstance.playAsync();
+        this.setState({ isPlaying: !isPlaying });
+    }
+
+    handlePreviousTrack = async () => {
+        let { playbackInstance, currentTrackIndex } = this.state;
+        if (playbackInstance) {
+            await playbackInstance.unloadAsync();
+            currentTrackIndex === 0 ? currentTrackIndex = playlist.length - 1 : currentTrackIndex -= 1;
+            this.setState({ currentTrackIndex });
+            this.loadAudio();
+        }
+    }
+
+    handleNextTrack = async () => {
+        let { playbackInstance, currentTrackIndex } = this.state;
+        if (playbackInstance) {
+            await playbackInstance.unloadAsync();
+            currentTrackIndex < playlist.length - 1 ? currentTrackIndex += 1 : currentTrackIndex = 0;
+            this.setState({ currentTrackIndex });
+            this.loadAudio();
+        }
+    }
+
+    render() {
+        return (
+            <View style={styles.container}>
+                <Text style={[styles.largeText, styles.buffer]}>
+                    {this.state.isBuffering && this.state.isPlaying ?
+                        'Buffering...' : null}
+                </Text>
+                {this.renderSongInfo()}
+                <View style={styles.controls}>
+                    <TouchableOpacity
+                        style={styles.control}
+                        onPress={this.handlePreviousTrack}
+                    >
+                        <Feather name="skip-back" size={32} color="#fff" />
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.control}
+                        onPress={this.handlePlayPause}
+                    >
+                        {this.state.isPlaying ?
+                            <Feather name="pause" size={32} color="#fff" /> :
+                            <Feather name="play" size={32} color="#fff" />
+                        }
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={styles.control}
+                        onPress={this.handleNextTrack}
+                    >
+                        <Feather name="skip-forward" size={32} color="#fff" />
+                    </TouchableOpacity>
+                </View>
+            </View>
+        );
+    }
 
 
-    return (
-      <View style={styles.container}>
-        <Text style={styles.preview}>Option 1: {this.state.option1}, Option 2: {this.state.option2}, Option 3: {this.state.option3}</Text>
-        <View style={styles.input}>
-          <View style={{ flexDirection: 'row' }}>
-            <Picker style={{ flex: 1 }} mode='dropdown'
-              selectedValue={this.state.option1}
-              onValueChange={(value) => { this.setState({ option1: value }); }}>
-              {pickerOptions.map((option) => {
-                return <Picker.Item key={option} label={option} value={option} />;
-              })}
-            </Picker>
-            <Picker style={{ flex: 1 }}
-              selectedValue={this.state.option2}
-              onValueChange={(value) => { this.setState({ option2: value }); }}>
-              {pickerOptions.map((option) => {
-                return <Picker.Item key={option} label={option} value={option} />;
-              })}
-            </Picker>
-            <Picker style={{ flex: 1 }}
-              selectedValue={this.state.option3}
-              onValueChange={(value) => { this.setState({ option3: value }); }}>
-              {pickerOptions.map((option) => {
-                return <Picker.Item key={option} label={option} value={option} />;
-              })}
-            </Picker>
-          </View>
-          <TouchableOpacity onPress={this.onSave} style=
-            {styles.button}>
-            <Text>Save locally</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={this.onLoad} style=
-            {styles.button}>
-            <Text>Load data</Text>
-          </TouchableOpacity>
+    renderSongInfo() {
+        const { playbackInstance, currentTrackIndex } = this.state;
+        return playbackInstance ? <View style={styles.trackInfo}>
+            <Text style={[styles.trackInfoText, styles.largeText]}>
+                {playlist[currentTrackIndex].title}
+            </Text>
+            <Text style={[styles.trackInfoText, styles.smallText]}>
+                {playlist[currentTrackIndex].artist}
+            </Text>
+            <Text style={[styles.trackInfoText, styles.smallText]}>
+                {playlist[currentTrackIndex].album}
+            </Text>
         </View>
-      </View>
-    );
-  }
+            : null;
+
+    }
+
 }
 
-
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-  }, preview: {
-    backgroundColor: '#bdc3c7',
-    width: 300,
-    height: 80,
-    padding: 10,
-    borderRadius: 5,
-    color: '#333',
-    marginBottom: 50,
-  }, input: {
-    backgroundColor: '#ecf0f1',
-    borderRadius: 3,
-    width: 400,
-    padding: 5,
-  },
-  button: {
-    backgroundColor: '#f39c12',
-    padding: 10,
-    borderRadius: 3,
-    marginTop: 10,
-  },
+    container: {
+        flex: 1,
+        backgroundColor: '#191A1A',
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    trackInfo: {
+        padding: 40,
+        backgroundColor: '#191A1A',
+    },
+    buffer: {
+        color: '#fff'
+    },
+    trackInfoText: {
+        textAlign: 'center',
+        flexWrap: 'wrap',
+        color: '#fff'
+    },
+    largeText: {
+        fontSize: 22
+    },
+    smallText: {
+        fontSize: 16
+    },
+    control: {
+        margin: 20
+    },
+    controls: {
+        flexDirection: 'row'
+    }
 });
